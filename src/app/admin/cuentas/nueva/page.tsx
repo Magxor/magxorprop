@@ -2,55 +2,40 @@
 
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
+import { crearCuentaConTitular } from "./actions";
 
 export default function NuevaCuentaPage() {
   const [nombre, setNombre] = useState("");
   const [emailTitular, setEmailTitular] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [creada, setCreada] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setCreada(null);
+    setMensaje(null);
     setCargando(true);
 
-    const { data: pais, error: errorPais } = await supabase
-      .from("paises")
-      .select("id")
-      .eq("iso", "AR")
-      .single();
-
-    if (errorPais || !pais) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       setCargando(false);
-      setError(`No se encontró Argentina: ${errorPais?.message ?? ""}`);
+      setError("Tu sesión expiró. Volvé a iniciar sesión.");
       return;
     }
 
-    const { data: cuenta, error: errorCuenta } = await supabase
-      .from("cuentas")
-      .insert({ nombre, email_titular: emailTitular })
-      .select("id")
-      .single();
-
-    if (errorCuenta || !cuenta) {
-      setCargando(false);
-      setError(`Error al crear la cuenta: ${errorCuenta?.message ?? ""}`);
-      return;
-    }
-
-    const { error: errorPaises } = await supabase
-      .from("cuenta_paises")
-      .insert({ cuenta_id: cuenta.id, pais_id: pais.id });
+    const resultado = await crearCuentaConTitular(
+      session.access_token,
+      nombre,
+      emailTitular
+    );
 
     setCargando(false);
-    if (errorPaises) {
-      setError(`La cuenta se creó, pero no se pudo habilitar el país: ${errorPaises.message}`);
+    if (!resultado.ok) {
+      setError(resultado.error);
       return;
     }
-
-    setCreada(`Cuenta creada (id ${cuenta.id}) con Argentina habilitada.`);
+    setMensaje(resultado.mensaje);
     setNombre("");
     setEmailTitular("");
   }
@@ -83,7 +68,7 @@ export default function NuevaCuentaPage() {
         </button>
       </form>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {creada && <p>{creada}</p>}
+      {mensaje && <p>{mensaje}</p>}
     </main>
   );
 }
